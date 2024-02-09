@@ -172,18 +172,14 @@ mean(rbinom(n=1000,size=1,prob=0.9))
 ```{r}
 vec = sample(c(rep(0,1250),rep(1,625),rep(2,625)))
 R=matrix(vec,nrow=50,ncol=50)
-
 table(c(R))
-
 #?matrix
 ```
 
 * Randomly punch holes (i.e. `NA`) values in this matrix so that an each entry is missing with probability 30%.
 
 ```{r}
-
 R[runif(2500) <.3] = NA
-R
 table(c(R))
 ```
 
@@ -196,9 +192,10 @@ R[order(rowSums(R,na.rm=TRUE),decreasing=TRUE),]
 * We will now learn the `apply` function. This is a handy function that saves writing for loops which should be eschewed in R. Use the apply function to compute a vector whose entries are the standard deviation of each row. Use the apply function to compute a vector whose entries are the standard deviation of each column. Be careful about the NA's! This should be one line.
 
 ```{r}
-#?apply
+?apply
 apply(R,MARGIN=1,sd,na.rm=TRUE)
 apply(R,MARGIN=2,sd,na.rm=TRUE)
+#apply(R,MARGIN=2,sum,na.rm=TRUE)
 ```
 
 * Use the `apply` function to compute a vector whose entries are the count of entries that are 1 or 2 in each column. This should be one line.
@@ -211,41 +208,33 @@ apply(R, MARGIN = 2, function(x){length(x[(x == 1 | x == 2) & !is.na(x)])})
 * Use the `split` function to create a list whose keys are the column number and values are the vector of the columns. Look at the last example in the documentation `?split`.
 
 ```{r}
-#?split
+?split
 #?list
 R_split=split(R,col(R))
-R_split[4]
+#R_split[4]
 ```
 
 * In one statement, use the `lapply` function to create a list whose keys are the column number and values are themselves a list with keys: "min" whose value is the minimum of the column, "max" whose value is the maximum of the column, "pct_missing" is the proportion of missingness in the column and "first_NA" whose value is the row number of the first time the NA appears.
 
 ```{r}
-#?lapply
-length(R_split)
+#R_split
+#lapply(R_split,min,na.rm=TRUE)
+#lapply(R_split,max,na.rm=TRUE)
+#lapply(R_split,function(x){length(x[is.na(x)])/50})
+#lapply(R_split,function(x){min(which(is.na(x)))})
 
-#lapply(R_split,)
-
-#max in each column
-max(R_split[[1]],na.rm=TRUE)
-#min in each column
-min(R_split[[2]],na.rm=TRUE)
-#proportion of NA's in each column
-apply(R, MARGIN = 2, function(x){length(x[is.na(x)])})/50
-#first_NA row number of the first time the NA appears
-
-#Position(function(x){R_split[x] == NA},x)
-#?Position
-R_split[4]
-#lapply(R_split,(function(x){}()))
-max(R,na.rm=TRUE)
-#?max
+lapply(R_split,function(x){list(min=(min(x,na.rm=TRUE)),max=(max(x,na.rm=TRUE)),
+                            pct_missing=(length(x[is.na(x)])/50),
+                            first_NA=(min(which(is.na(x)))))
+  }
+  )
 
 ```
 
 * Set a seed and then create a vector `v` consisting of a sample of 1,000 iid normal realizations with mean -10 and variance 100.
 
 ```{r}
-set.seed(123)
+set.seed(12)
 n=1000
 v=rnorm(n,-10,100)
 ```
@@ -253,7 +242,7 @@ v=rnorm(n,-10,100)
 * Repeat this exercise by resetting the seed to ensure you obtain the same results.
 
 ```{r}
-set.seed(123)
+set.seed(12)
 v2=rnorm(n,-10,100)
 ```
 
@@ -261,15 +250,16 @@ v2=rnorm(n,-10,100)
 
 ```{r}
 mean(v)
-#?SE
+?sd
 #?mean
-sd(v)/sqrt(length(v))
+se=sd(v)/sqrt(length(v))
 summary(v)
 ```
 
 * Find the 5%ile of `v` and use the `qnorm` function to compute what it theoretically should be. Is the estimate about what is expected by theory?
 
 ```{r}
+?ecdf
 v3=sort(v)
 v3[50]
 #?qnorm
@@ -326,7 +316,6 @@ my_list$E=array(1:5^5,dim=c(rep(5,5)))
 my_list$F=array(1:6^6,dim=c(rep(6,6)))
 my_list$G=array(1:7^7,dim=c(rep(7,7)))
 my_list$H=array(1:8^8,dim=c(rep(8,8)))
-
 #my_list
 ```
 
@@ -384,9 +373,13 @@ Test the `my_reverse` function using the following code:
 
 ```{r}
 lorem = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Morbi posuere varius volutpat. Morbi faucibus ligula id massa ultricies viverra. Donec vehicula sagittis nisi non semper. Donec at tempor erat. Integer dapibus mi lectus, eu posuere arcu ultricies in. Cras suscipit id nibh lacinia elementum. Curabitur est augue, congue eget quam in, scelerisque semper magna. Aenean nulla ante, iaculis sed vehicula ac, finibus vel arcu. Mauris at sodales augue. "
-#?strsplit
-sample(strsplit(lorem," "))
-#?sample
+?strsplit
+?paste
+strsplit(lorem,". ", fixed=TRUE)
+sample(strsplit(lorem,". ", fixed=TRUE)[[1]],size=10,replace=FALSE)
+ltn=paste(v,sep = '. ',collapse='. ')
+paste(ltn,".",sep='')
+
 ```
 
 You have a set of names divided by gender (M / F) and generation (Boomer / GenX / Millenial):

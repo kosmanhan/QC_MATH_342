@@ -44,7 +44,7 @@ prod(2^(-(0:386)))
 
 Is this answer *exactly* correct? 
   
-No
+No, because this is just an approximation. The computer cannot compute small numbers beyond a certain point. 
   
 * Figure out a means to express the answer more exactly. Not compute exactly, but express more exactly.
 
@@ -119,20 +119,19 @@ length(unique(x))
 ```{r}
 as.factor(x)
 ```
+The numbers are all in separate factors, but all the NaN's are collected into one factor. So therefore the 53 levels make sense.
 
 * Cast `x` to integers. What do we learn about R's infinity representation in the integer data type?
   
 ```{r}
 as.integer(x)
-
 #positive and negative infinity are represented by NA in the integer data type.
 ```
-
+All infinity (positive and negative) are NA's. 
 * Use `x` to create a new vector `y` containing only the real numbers in x.
 
 ```{r}
 y=x[is.finite(x)]
-
 ```
 
 * Use the left rectangle method to numerically integrate x^2 from 0 to 1 with rectangle width size 1e-6.
@@ -141,7 +140,6 @@ y=x[is.finite(x)]
 delta_x=1e-6
 sum((seq(0,1-delta_x,by=delta_x))^2)*delta_x
 ```
-
 
 * Calculate the average of 100 realizations of standard Bernoullis in one line using the `sample` function.
 
@@ -156,7 +154,6 @@ mean(sample(x_bern,size=100, replace=TRUE))
 
 ```{r}
 mean(sample(c(0,1),size=500, replace=TRUE, prob = c(0.1, 0.9)))
-
 ```
 
 
@@ -281,42 +278,38 @@ pnorm(0,-10,100)
 * Create a function `my_reverse` which takes as required input a vector `v` and returns the vector in reverse where the first entry is the last entry, etc. No function calls are allowed inside your function otherwise that would defeat the purpose of the exercise! (Yes, there is a base R function that does this called `rev`). Use `head` on `v` and `tail` on `my_reverse(v)` to verify it works.
 
 ```{r}
-rvrsx=c(rep(NA,1000))
-l=length(v)
-my_reverse=function(x){
-
+my_reverse=function(v){
+  l=length(v)
+  rvrsv=c(rep(NA,l))
+  for (i in 1:l){
+    rvrsv[i]=v[l+1-i]
   }
-
-l=length(v)
-rvrsv=c(rep(NA,l))
-for (i in 1:l){
-  rvrsv[i]=v[l+1-i]
+  rvrsv
 }
-rvrsv
-what=my_reverse(v)
-what
-what
+my_reverse(v)
+head(v)
+tail(my_reverse(v))
 ```
 
-* Create a function `flip_matrix` which takes as required input a matrix, an argument `dim_to_rev` that returns the matrix with the rows in reverse order or the columns in reverse order depending on the `dim_to_rev` argument. Let the default be the dimension of the matrix that is greater. If the number of rows 
+* Create a function `flip_matrix` which takes as required input a matrix, an argument `dim_to_rev` that returns the matrix with the rows in reverse order or the columns in reverse order depending on the `dim_to_rev` argument. Let the default be the dimension of the matrix that is greater. 
 
 ```{r}
-#TO-DO
+matr=matrix(c(12,3,4,5,5,6), nrow=3, ncol=2)
+matr
+nrow(matr)
+
+flip_matrix=function(m,dim_to_rev = NULL){
+  
+}
 ```
 
 * Create a list named `my_list` with keys "A", "B", ... where the entries are arrays of size 1, 2 x 2, 3 x 3 x 3, etc. Fill the array with the numbers 1, 2, 3, etc. Make 8 entries according to this sequence.
 
 ```{r}
 my_list=list()
-my_list$A=1
-my_list$B=array(1:4,dim=c(2,2))
-my_list$C=array(1:27,dim=c(3,3,3))
-my_list$D=array(1:4^4,dim=c(4,4,4,4))
-my_list$E=array(1:5^5,dim=c(rep(5,5)))
-my_list$F=array(1:6^6,dim=c(rep(6,6)))
-my_list$G=array(1:7^7,dim=c(rep(7,7)))
-my_list$H=array(1:8^8,dim=c(rep(8,8)))
-#my_list
+for (i in seq_along(LETTERS[1:8])) {
+  my_list[[LETTERS[i]]] = array(1:(i^i), dim = rep(i, i))
+}
 ```
 
 Run the following code:
@@ -329,8 +322,6 @@ lapply(my_list, object.size)
 Use `?object.size` to read about what these functions do. Then explain the output you see above. For the later arrays, does it make sense given the dimensions of the arrays?
 
 From C onwards, it does make sense as the rate of increase is really high. Each upward step in alphabet results in an increase of at least 10 times. 
-
-#TO-DO
 
 ## Packages
 
@@ -353,7 +344,7 @@ pacman::p_load(testthat)
 
 ```{r}
 v = seq(-100, 100)
-#expect_equal(v, -100 : 101)
+expect_equal(v, -100 : 101)
 ```
 
 If there are any errors, the `expect_equal` function will tell you about them. If there are no errors, then it will be silent.
@@ -363,8 +354,8 @@ Yes, there was an error as the two sequences are not equal.
 Test the `my_reverse` function using the following code:
 
 ```{r}
-#expect_equal(my_reverse(v), rev(v))
-#expect_equal(my_reverse(c("A", "B", "C")), c("C", "B", "A"))
+expect_equal(my_reverse(v), rev(v))
+expect_equal(my_reverse(c("A", "B", "C")), c("C", "B", "A"))
 ```
 
 ## A little about strings

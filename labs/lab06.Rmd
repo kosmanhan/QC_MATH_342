@@ -1,0 +1,434 @@
+---
+title: "Lab 6"
+author: "Osman Khan"
+output: pdf_document
+due: 24th March 2024
+---
+
+#Visualization with the package ggplot2
+
+I highly recommend using the [ggplot cheat sheet](https://rstudio.github.io/cheatsheets/data-visualization.pdf) as a reference resource. You will see questions that say "Create the best-looking plot". Among other things you may choose to do, remember to label the axes using real English, provide a title and subtitle. You may want to pick a theme and color scheme that you like and keep that constant throughout this lab. The default is fine if you are running short of time.
+
+Load up the `GSSvocab` dataset in package `carData` as `X` and drop all observations with missing measurements. This will be a very hard visualization exercise since there is not a good model for vocab.
+
+```{r}
+pacman::p_load(carData)
+X=carData::GSSvocab
+X=na.omit(X )
+skimr::skim(X)
+```
+
+Briefly summarize the documentation on this dataset. What is the data type of each variable? What do you think is the response variable the collectors of this data had in mind?
+
+There are 27,360 rows for 8 variables. The data type for 5 variables is nominal (year, gender, nativeBorn, ageGroup, educGroup), while for 3 variables it is ordinal (vocab, age, educ). I think the response variable is vocab, as everything else seems to be a demographical statistic.
+
+Create two different plots and identify the best-looking plot you can to examine the `age` variable. Save the best looking plot as an appropriately-named PDF.
+
+```{r}
+?GSSvocab
+pacman::p_load(ggplot2)
+agedenseplot = 
+ggplot(X) +
+  aes(age) +
+  geom_density(col = "maroon",fill = "yellow", alpha=0.3)
+agebarplot = 
+  ggplot(X) +
+  aes(age) +
+  geom_bar(col = "purple", fill = "skyblue", alpha = 0.2)
+agebarplot
+ggsave("agebarplot.pdf")
+system("open agebarplot.pdf")
+#geom_dotplot/histogram() looks terrible, geom_curve/path/area/point() ) doesn't work
+```
+
+Create two different plots and identify the best looking plot you can to examine the `vocab` variable. Save the best looking plot as an appropriately-named PDF.
+
+```{r}
+X$vocab_factor=factor(X$vocab)
+vocabhistplot=
+  ggplot(X) + 
+  aes(vocab) +
+  geom_histogram(fill='beige') 
+vocabbarplot=
+  ggplot(X) + aes(vocab_factor) + geom_bar(fill='yellow',col='black',alpha=0.5)
+ggsave("vocabbarplot.pdf")
+system("open vocabbarplot.pdf")
+```
+
+Create the best-looking plot you can to examine the `ageGroup` variable by `gender`. Does there appear to be an association? There are many ways to do this.
+
+```{r}
+ggplot(X) + aes(x = gender) + geom_bar(data=subset(X,gender =="female"),fill='skyblue',col='blue') +
+ geom_bar(data=subset(X,gender =="male"),fill='pink',col='purple') + facet_grid(.~ ageGroup)
+```
+A: There are more females than males across every ageGroup.
+
+Create the best-looking plot you can to examine the `vocab` variable by `age`. Does there appear to be an association?
+
+```{r}
+ggplot(X)+
+  aes(x=age,y=vocab_factor)+
+  geom_boxplot(fill='magenta',col='darkgoldenrod1')
+```
+A: The mean age appears to drop until 6, after which it increases. Which shows, older people in general score higher.
+
+Add an estimate of $f(x)$ using the smoothing geometry to the previous plot. Does there appear to be an association now?
+
+```{r}
+ggplot(X) + aes(x = age, y= vocab) + geom_point() + geom_smooth()
+```
+
+Vocab increases until the age of 40, after which it remains stagnant for 25 years. Then, it declines.
+
+Using the plot from the previous question, create the best looking plot overloading with variable `gender`. Does there appear to be an interaction of `gender` and `age`?
+
+```{r}
+ggplot(X) + aes(x = age, y= vocab, color = gender) + geom_smooth()
+```
+
+A: Males only outperform females during 25-35.
+
+Using the plot from the previous question, create the best looking plot overloading with variable `nativeBorn`. Does there appear to be an interaction of `nativeBorn` and `age`?
+
+```{r}
+ggplot(X) + aes(x = age, y= vocab, color = nativeBorn) + geom_smooth()
+```
+A: Nativeborn vastly outperform non-nativeborns.
+
+Create two different plots and identify the best-looking plot you can to examine the `vocab` variable by `educGroup`. Does there appear to be an association?
+
+```{r}
+ggplot(X) + aes(x= educGroup, y = vocab) + geom_boxplot(data=subset(X,educGroup == '<12 yrs'), fill='steelblue4',col='white') +
+  geom_boxplot(data=subset(X,educGroup == '12 yrs'), fill='navyblue',col='yellow') +
+  geom_boxplot(data=subset(X,educGroup == '13-15 yrs'), fill='slateblue3',col='maroon4') +
+  geom_boxplot(data=subset(X,educGroup == '16 yrs'), fill='darkorchid3',col='cornsilk') +
+  geom_boxplot(data=subset(X,educGroup == '>16 yrs'), fill='indianred2',col='orange') 
+ggplot(X) + aes(x= educGroup, y = vocab) + geom_violin(data=subset(X,educGroup == '<12 yrs'), fill='brown',col='green') +
+  geom_violin(data=subset(X,educGroup == '12 yrs'), fill='brown',col='chartreuse') +
+  geom_violin(data=subset(X,educGroup == '13-15 yrs'), fill='red',col='darkseagreen4') +
+  geom_violin(data=subset(X,educGroup == '16 yrs'), fill='darksalmon',col='azure') +
+  geom_violin(data=subset(X,educGroup == '>16 yrs'), fill='burlywood',col='aquamarine') 
+```
+Vocab appears to improve as we go further up in educGroup.
+
+Using the best-looking plot from the previous question, create the best looking overloading with variable `gender`. Does there appear to be an interaction of `gender` and `educGroup`?
+
+```{r}
+ggplot(X) + aes(x= educGroup, y = vocab) + geom_violin(data=subset(X,educGroup == '<12 yrs'), fill='brown',col='green') +
+  geom_violin(data=subset(X,educGroup == '12 yrs'), fill='brown',col='chartreuse') +
+  geom_violin(data=subset(X,educGroup == '13-15 yrs'), fill='red',col='darkseagreen4') +
+  geom_violin(data=subset(X,educGroup == '16 yrs'), fill='darksalmon',col='azure') +
+  geom_violin(data=subset(X,educGroup == '>16 yrs'), fill='burlywood',col='aquamarine') +
+  facet_grid(.~ gender)
+```
+A: females and males perform similarly for the first three educGroups, but for 16 years and above, females outperform.
+
+Using facets, examine the relationship between `vocab` and `ageGroup`. You can drop year level `(Other)`. Are we getting dumber?
+
+```{r}
+ggplot(X) +
+  aes(vocab) +
+  geom_bar(fill='gold', col='grey3')+
+  facet_grid(.~ageGroup)
+```
+A: There does not appear to be evidence to suggest we are getting dumber. Also, there was no 'other' year level.
+
+#Logistic Regression
+
+Let's consider the Pima Indians Diabetes dataset from 1988:
+
+```{r}
+?MASS::Pima.tr
+skimr::skim(MASS::Pima.tr)
+y = ifelse(MASS::Pima.tr$type == "Yes", 1, 0)
+X = cbind(1, MASS::Pima.tr[, 1 : 7])
+piman=length(y)
+```
+
+Note the missing data. We will learn about how to handle missing data towards the end of the course. For now, replace, the missing data in the design matrix X with the average of the feature x_dot,j. You can check that this worked with the table commands at the end of the chunk:
+
+```{r}
+pima = na.omit(MASS::Pima.tr)
+table(X$bp, useNA = "always")
+table(X$skin, useNA = "always")
+table(X$bmi, useNA = "always")
+```
+
+Now let's fit a log-odds linear model of y=1 (type is "diabetic") on just the `glu` variable. Use `optim` to fit the model.
+
+```{r}
+x = pima$glu
+log_logistic_prob = function(w){
+  -sum(-y*log(1+exp(-w[1]-w[2]*x))-(1-y)*log(1+exp(w[1]+w[2]*x)))
+}
+optim(c(4,1),log_logistic_prob)$par
+?optim
+
+```
+
+Masters students: write a `fit_logistic_regression` function which takes in X, y and returns b which uses the optimization routine.
+
+```{r}
+fit_logistic_regression = function(X, y){
+  w=c(0,0)
+  log_logistic_prob = function(w){
+  -sum(-y*log(1+exp(-w[1]-w[2]*x))-(1-y)*log(1+exp(w[1]+w[2]*x)))
+}
+  b = optim(w,log_logistic_prob)$par
+  b
+}
+ourb=fit_logistic_regression(x,y)
+ourb
+```
+
+Run a logistic regression of y=1 (type is "diabetic") on just the `glu` variable using R's built-in function and report b_0, b_1.
+
+```{r}
+theirb = coef(glm(y~x, family="binomial"))
+theirb
+ourb-theirb
+```
+
+Comment on how close the results from R's built-in function was and your optimization call.
+
+The results are very close,  1.139825e-03 & -9.041291e-06 
+
+Interpret the value of b_1 from R's built-in function.
+
+A unit increase in x results in a -0.04 increase in log odds of having diabetes.
+
+Interpret the value of b_0 from R's built-in function.
+
+A unit increase in x results in a 5.5 increase in log odds of having diabetes.
+
+Plot the probability of y=1 from the minimum value of `glu` to the maximum value of `glu`.
+
+```{r}
+min(x)
+max(x)
+res = .1
+x_stars = seq(from = min(x), to = max(x), by = res)
+log_odds_hat = cbind(1, x_stars)%*%b
+p_hat=1/(1+exp(-log_odds_hat))
+pacman::p_load(ggplot2)
+ggplot(data.frame(glucose=x_stars, pred_prob_diab = p_hat)) +
+  aes(x = glucose, y = pred_prob_diab) +
+  geom_line()
+```
+
+Run a logistic regression of y=1 (type is "diabetic") on all variables using R's built-in function and report the b vector.
+
+```{r}
+coef(glm(y ~ X[, "glu"], family = "binomial"))
+coef(glm(y ~ X[, "npreg"], family = "binomial"))
+coef(glm(y ~ X[, "bp"], family = "binomial"))
+coef(glm(y ~ X[, "skin"], family = "binomial"))
+coef(glm(y ~ X[, "bmi"], family = "binomial"))
+coef(glm(y ~ X[, "ped"], family = "binomial"))
+coef(glm(y ~ X[, "age"], family = "binomial"))
+?glm
+coef(
+  glm(y ~ 
+      X[, "age"] + 
+      X[, "ped"] +
+      X[, "bmi"] +
+      X[, "skin"] +
+      X[, "bp"] +
+      X[, "npreg"] +
+      X[, "glu"], family = "binomial")
+  )
+```
+Predict the probability of diabetes for someone with a blood sugar of 150.
+
+```{r}
+p=1-(1/(1+exp(-5.50363574+(150*0.03778372))))
+```
+
+For 100 people with blood sugar of 150, what is the probability more than 75 of them have diabetes? (You may need to review 241 to do this problem).
+
+```{r}
+n = 100
+prob=0
+for(i in 76:100){
+  prob=prob+((factorial(100)/(factorial(i)*factorial(100-i)))*(p^i)*(1-p)^(100-i)) #I could not find nchoosek function
+  print(prob)
+}
+prob
+
+#using R's inbuilt features:
+?pbinom
+rprob=0
+for(j in 76:100){
+  rprob=rprob+dbinom(j,n,p)
+}
+rprob
+#which happens to be the same I calculated
+```
+
+Plot the in-sample log-odds predictions (y-axis) versus the real response values (x-axis).
+
+```{r}
+p_hat=glm(y ~ X[, "glu"], family = "binomial")$fitted.values
+log_odds_hat=log(p_hat/(1-p_hat))
+has_diabetes = factor(y)
+log_odds_hat
+ggplot(data.frame(log_odds_hat=log_odds_hat, has_diabetes = factor(y))) +
+         aes(x = has_diabetes, y = log_odds_hat) +
+         geom_boxplot()
+
+p_hatter=glm(y ~ 
+      X[, "age"] + 
+      X[, "ped"] +
+      X[, "bmi"] +
+      X[, "skin"] +
+      X[, "bp"] +
+      X[, "npreg"] +
+      X[, "glu"], family = "binomial")$fitted.values
+p_hatter
+
+log_odds_hatter=log(p_hatter/(1-p_hatter))
+has_diabetes = factor(y)
+log_odds_hatter
+ggplot(data.frame(log_odds_hatter=log_odds_hatter, has_diabetes = factor(y))) +
+         aes(x = has_diabetes, y = log_odds_hatter) +
+         geom_boxplot()
+```
+
+Plot the in-sample probability predictions (y-axis) versus the real response values (x-axis).
+
+```{r}
+ggplot(data.frame(p_hat=p_hat, has_diabetes = factor(y))) +
+         aes(x = has_diabetes, y = p_hat) +
+         geom_boxplot()
+
+ggplot(data.frame(p_hatter=p_hatter, has_diabetes = factor(y))) +
+         aes(x = has_diabetes, y = p_hatter) +
+         geom_boxplot()
+```
+
+Comment on how well you think the logistic regression performed in-sample.
+
+Logistic regression had a mean of 50% for predicting correctly on someone with diabetes, while for a person without, the mean was much lower (<20%). 50% is a tossup, which meant logistic did poorly overall.
+
+Calculate the in-sample Brier score.
+
+```{r}
+lrbrier=sum(-(p_hatter-y)^2)/piman
+```
+
+Calculate the in-sample log-scoring rule.
+
+```{r}
+lrlogscoring=sum(y*log(p_hatter)+(1-y)*log(p_hatter))/piman
+```
+
+Run a probit regression of y=1 (type is "diabetic") on all variables using R's built-in function and report the b vector.
+
+
+```{r}
+coef(
+  glm(y ~ 
+      X[, "age"] + 
+      X[, "ped"] +
+      X[, "bmi"] +
+      X[, "skin"] +
+      X[, "bp"] +
+      X[, "npreg"] +
+      X[, "glu"], family = "binomial"(link="probit"))
+  )
+
+```
+
+Does the weight estimates here in the probit fit have different signs than the weight estimates in the logistic fit? What does that mean?
+
+No, the signs are the same. This means both fits have the same general direction of impact.
+
+Plot the in-sample probability predictions (y-axis) versus the real response values (x-axis).
+
+```{r}
+p_hatterprobit=glm(y ~ X[, "age"] + 
+      X[, "ped"] +
+      X[, "bmi"] +
+      X[, "skin"] +
+      X[, "bp"] +
+      X[, "npreg"] +
+      X[, "glu"], family = "binomial"(link="probit"))$fitted.values
+ggplot(data.frame(p_hatterprobit=p_hatterprobit, has_diabetes = factor(y))) +
+         aes(x = has_diabetes, y = p_hatterprobit) +
+         geom_boxplot()
+
+```
+
+Calculate the in-sample Brier score.
+
+```{r}
+prbrier=sum(-(p_hatterprobit-y)^2)/piman
+lrbrier-prbrier
+```
+
+Calculate the in-sample log-scoring rule.
+
+```{r}
+prlogscoring=sum(y*log(p_hatterprobit)+(1-y)*log(p_hatterprobit))/piman
+lrlogscoring-prlogscoring
+```
+
+Which model did better in-sample?
+
+Logistic did better on the log scoring while probit regression did better on the log-scoring rule.
+
+Compare both model oos using the Brier score and a test set with 1/3 of the data.
+
+```{r}
+#I set seed to 1994 as that is my birth year
+set.seed(1994)
+K = 3
+test_prop = 1 / K
+train_indices = sample(1 : piman, round((1 - test_prop) * piman))
+test_indices = setdiff(1 : piman, train_indices)
+y_train = y[train_indices]
+X_train = X[train_indices,]
+y_test = y[test_indices]
+X_test = X[test_indices,]
+
+logistic_mod = glm(y_train ~ 
+      X_train[, "age"] + 
+      X_train[, "ped"] +
+      X_train[, "bmi"] +
+      X_train[, "skin"] +
+      X_train[, "bp"] +
+      X_train[, "npreg"] +
+      X_train[, "glu"], family = "binomial")
+#negative values don't make sense, so they were absoluted
+phatlogittrain=abs(predict(logistic_mod,X_train))
+phatlogittest=abs(predict(logistic_mod,X_test))
+
+probit_mod= glm(y_train ~ 
+      X_train[, "age"] + 
+      X_train[, "ped"] +
+      X_train[, "bmi"] +
+      X_train[, "skin"] +
+      X_train[, "bp"] +
+      X_train[, "npreg"] +
+      X_train[, "glu"], family = "binomial"(link="probit"))
+#negative values don't make sense, so they were absoluted
+phatprobittrain=abs(predict(probit_mod,X_train))
+phatprobittest=abs(predict(probit_mod,X_test))
+
+lrtrainbrier=mean(-(phatlogittrain-y_train)^2)
+lrtrainlogscoring=mean(y_train*log(phatlogittrain)+(1-y_train)*log(phatlogittrain))
+prtrainbrier=mean(-(phatprobittrain-y_train)^2)
+prtrainlogscoring=mean(y_train*log(phatprobittrain)+(1-y_train)*log(phatprobittrain))
+lrtestbrier=mean(-(phatlogittest-y_train)^2)
+lrtestlogscoring=mean(y_train*log(phatlogittest)+(1-y_train)*log(phatlogittest))
+prtestbrier=mean(-(phatprobittest-y_train)^2)
+prtestlogscoring=mean(y_train*log(phatprobittest)+(1-y_train)*log(phatprobittest))
+
+lrtestbrier-prtestbrier
+
+lrtestlogscoring-prtestlogscoring
+```
+
+Which model did better oos?
+
+Once again, Logistic did better at logscoring while Probit did better at Brier.

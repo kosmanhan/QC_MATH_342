@@ -1,0 +1,789 @@
+---
+title: "Lab 8"
+author: "Osman Khan"
+output: pdf_document
+date: 7th April 2024
+---
+
+#Model Selection with Three Splits: Select from M models
+
+We employ the diamonds dataset and specify M models nested from simple to more complex. We store the models as strings in a list (i.e. a hashset)
+
+```{r}
+#rm(list = ls())
+?ggplot2::diamonds
+model_formulas = c(
+  "carat",
+  "carat + cut",
+  "carat + cut + color",
+  "carat + cut + color + clarity",
+  "carat + cut + color + clarity + x + y + z",
+  "carat + cut + color + clarity + x + y + z + depth",
+  "carat + cut + color + clarity + x + y + z + depth + table",
+  "carat * (cut + color + clarity) + x + y + z + depth + table",
+  "(carat + x + y + z) * (cut + color + clarity) + depth + table",
+  "(carat + x + y + z + depth + table) * (cut + color + clarity)",
+  "(poly(carat, 2) + x + y + z + depth + table) * (cut + color + clarity)",
+  "(poly(carat, 2) + poly(x, 2) + poly(y, 2) + poly(z, 2) + depth + table) * (cut + color + clarity)",
+  "(poly(carat, 2) + poly(x, 2) + poly(y, 2) + poly(z, 2) + poly(depth, 2) + poly(table, 2)) * (cut + color + clarity)",
+  "(poly(carat, 2) + poly(x, 2) + poly(y, 2) + poly(z, 2) + poly(depth, 2) + poly(table, 2) + log(carat) + log(x) + log(y) + log(z)) * (cut + color + clarity)",
+  "(poly(carat, 2) + poly(x, 2) + poly(y, 2) + poly(z, 2) + poly(depth, 2) + poly(table, 2) + log(carat) + log(x) + log(y) + log(z) + log(depth)) * (cut + color + clarity)",
+  "(poly(carat, 2) + poly(x, 2) + poly(y, 2) + poly(z, 2) + poly(depth, 2) + poly(table, 2) + log(carat) + log(x) + log(y) + log(z) + log(depth) + log(table)) * (cut + color + clarity)",
+  "(poly(carat, 2) + poly(x, 2) + poly(y, 2) + poly(z, 2) + poly(depth, 2) + poly(table, 2) + log(carat) + log(x) + log(y) + log(z) + log(depth) + log(table)) * (cut + color + clarity + poly(carat, 2) + poly(x, 2) + poly(y, 2) + poly(z, 2) + poly(depth, 2) + poly(table, 2) + log(carat) + log(x) + log(y) + log(z) + log(depth) + log(table))"
+)
+model_formulas = paste0("price ~ ", model_formulas)
+M = length(model_formulas)
+```
+
+In order to use the formulas with logs we need to eliminate rows with zeros in those measurements:
+
+```{r}
+diamonds_cleaned = ggplot2::diamonds
+diamonds_cleaned = diamonds_cleaned[
+  diamonds_cleaned$carat > 0 &
+  diamonds_cleaned$x > 0 &
+  diamonds_cleaned$y > 0 &
+  diamonds_cleaned$z > 0 &
+  diamonds_cleaned$depth > 0 &
+  diamonds_cleaned$table > 0, #all columns
+]
+```
+
+Split the data into train, select and test. Each set should have 1/3 of the total data.
+
+```{r}
+n = nrow(diamonds_cleaned)
+set.seed(1)
+train_idx = sample(1 : n, round(n / 3))
+select_idx = sample(setdiff(1 : n, train_idx), round(n / 3))
+test_idx = setdiff(1 : n, c(train_idx, select_idx))
+diamonds_train =  diamonds_cleaned[train_idx, ]
+diamonds_select = diamonds_cleaned[select_idx, ]
+diamonds_test =   diamonds_cleaned[test_idx, ]
+```
+
+Find the oosRMSE on the select set for each model. Save the number of df in each model while you're doing this as we'll need it for later.
+
+```{r}
+dfs = array(NA, M)
+oosRMSEs = array(NA, M)
+for (m in 1:M){
+  mod = lm(model_formulas[m],diamonds_train)
+  dfs[m] = mod$rank
+  yhat = predict(mod,diamonds_select)
+  oosRMSEs[m] = sqrt(mean((diamonds_select$price-yhat)^2))
+  }
+```
+
+Plot the oosRMSE by model complexity (df in model)
+
+```{r}
+pacman::p_load(ggplot2)
+ggplot(data.frame(df = dfs, oosRMSE=oosRMSEs))+
+  aes(x = df, y = oosRMSE)+
+  geom_line()+
+  geom_point()+
+  ylim(0,1e4)
+```
+
+Select the best model by oosRMSE and find its oosRMSE on the test set.
+
+```{r}
+m_star = which.min(oosRMSEs)
+mod_star = lm(model_formulas[m_star],rbind(diamonds_train,diamonds_select))
+#mod_star = lm(model_formulas[m_star],rbind(diamonds_train))
+yhat = predict(mod_star,diamonds_test)
+sqrt(mean((diamonds_test$price-yhat)^2))
+oosRMSEs[m_star]
+```
+
+Did we overfit the select set? Discuss why or why not.
+
+No, we only have 17 models, over a large data set. The test oosRMSE on the select set is not less than the oosRMSE on the test set.
+
+Create the final model object `g_final`.
+
+```{r}
+mod_star = lm(model_formulas[m_star],diamonds_cleaned)
+g_final=function(x_star){
+  yhat = predict(mod_star,diamonds_cleaned)
+}
+
+```
+
+
+#Model Selection with Three Splits: Hyperparameter selection
+
+We will use an algorithm that I historically taught in 324W but now moved to 343 so I can teach it more deeply using the Bayesian topics from 341. The regression algorithm is called "ridge" and it involves solving for the slope vector via:
+
+b_ridge := (X^T X + lambda I_(p+1))^-1 X^T y
+
+Note how if lambda = 0, this is the same algorithm as OLS. If lambda becomes very large then b_ridge is pushed towards all zeroes. So ridge is good at weighting only features that matter.
+
+However, lambda is a hyperparameter >= 0 that needs to be selected.
+
+We will work with the boston housing dataset except we will add 250 garbage features consisting of iid N(0,1) realizations. We will also standardize the columns so they're all xbar = 0 and s_x = 1. This is shown to be important in 343.
+
+```{r}
+rm(list = ls())
+?MASS::Boston
+y = MASS::Boston$medv
+X = model.matrix(medv ~ ., MASS::Boston)
+n = nrow(X)
+p_garbage = 250
+set.seed(1)
+X = cbind(X, matrix(rnorm(n * p_garbage), nrow = n))
+X = apply(X, 2, function(x_dot_j){
+                  (x_dot_j - mean(x_dot_j)) / sd(x_dot_j)
+                })
+X[,1] = 1
+dim(X)
+```
+
+
+Now we split it into 300 train, 100 select and 106 test. 
+
+```{r}
+set.seed(1)
+train_idx = sample(1 : n, 300)
+select_idx = sample(setdiff(1 : n, train_idx), 100)
+test_idx = setdiff(1 : n, c(train_idx, select_idx))
+X_train = X[train_idx,]
+y_train = y[train_idx]
+X_select = X[select_idx,]
+y_select = y[select_idx]
+X_test = X[test_idx,]
+y_test = y[test_idx]
+```
+
+We now create a grid of M = 200 models indexed by lambda. The lowest lambda should be zero (which is OLS) and the highest lambda can be 100.
+
+```{r}
+M = 200
+lambda_grid = seq(from = 0, to = 100, length.out = M)
+```
+
+Now find the oosRMSE on the select set on all models each with their own lambda value.
+
+```{r}
+oosRMSEs= array(NA,M)
+XtX = t(X_train)%*%X_train
+Xty = t(X_train)%*%y_train
+I_p_plus_one = diag(ncol(X_train))
+for (m in 1:M) {
+  b_ridge =solve(XtX + lambda_grid[m] * I_p_plus_one) %*% Xty
+  yhat = X_select %*% b_ridge
+  oosRMSEs[m] = sqrt(mean((y_select-yhat)^2))
+}
+```
+
+Plot the oosRMSE by the value of lambda.
+
+```{r}
+ggplot(data.frame(lambda=lambda_grid, oosRMSE = oosRMSEs)) +
+  aes (x=lambda,y=oosRMSE) +
+  geom_line(color='cyan') +
+  geom_point(color='purple')
+```
+
+Select the model with the best oosRMSE on the select set and find its oosRMSE on the test set.
+
+```{r}
+#TO-DO
+```
+
+Create the final model object `g_final`.
+
+```{r}
+#TO-DO
+```
+
+
+#Model Selection with Three Splits: Forward stepwise modeling
+
+We will use the adult data
+
+```{r}
+rm(list = ls())
+pacman::p_load_gh("coatless/ucidata") #load from github
+data(adult)
+adult = na.omit(adult) #remove any observations with missingness
+n = nrow(adult)
+?adult
+#let's remove "education" as its duplicative with education_num
+adult$education = NULL
+ncol(adult)
+```
+
+
+To implement forward stepwise, we need a "full model" that contains anything and everything we can possible want to use as transformed predictors. Let's first create log features of all the numeric features. Instead of pure log, use log(value + 1) to handle possible zeroes.
+
+```{r}
+skimr::skim(adult)
+#this gives us the list of numeric features to create logs
+adult$log_age = log(adult$age + 1)
+adult$log_fnlwgt = log(adult$fnlwgt + 1)
+adult$log_education_num = log(adult$education_num + 1)
+adult$log_capital_gain = log(adult$capital_gain + 1)
+adult$log_capital_loss = log(adult$capital_loss + 1)
+adult$log_hours_per_week = log(adult$hours_per_week + 1)
+```
+
+Now let's create a model matrix Xfull that contains all first order interactions. How many degrees of freedom in this "full model"?
+
+```{r}
+Xfull = model.matrix(income ~ . * ., adult)
+ncol(Xfull)
+p_plus_one=ncol(Xfull)
+```
+
+Now let's split it into train, select and test sets. Because this will be a glm, model-building (training) will be slow, so let's keep the training set small at 2,000. Since prediction is fast, we can divide the others evenly among select and test.
+
+```{r}
+y = ifelse(adult$income == ">50K", 1, 0)
+train_idx = sample(1:n,2000)
+select_idx = sample(setdiff(1:n,train_idx),14000)
+test_idx = setdiff(1:n,c(train_idx,select_idx))
+Xfull_train =  Xfull[train_idx, ]
+Xfull_select = Xfull[select_idx, ]
+Xfull_test =   Xfull[test_idx, ]
+y_train =      y[train_idx]
+y_select =     y[select_idx]
+y_test =       y[test_idx]
+
+```
+
+Now let's use the code from class to run the forward stepwise modeling. As this is binary classification, let's use logistic regression and to measure model performance, let's use the Brier score. Compute the Brier score in-sample (on training set) and oos (on selection set) for every iteration of j, the number of features selected from the greedy selection procedure.
+
+```{r}
+included_features_by_iter = c() #keep a growing list of predictors by iteration
+in_sample_briers_by_iteration = c() #keep a growing list of se's by iteration
+oos_briers_by_iteration = c() #keep a growing list of se's by iteration
+i = 1
+
+repeat {
+
+  #get all predictors left to try
+  all_briers = array(NA, p_plus_one) #record all possibilities
+  for (j_try in 1 : p_plus_one){
+    if (j_try %in% included_features_by_iter){
+      next 
+    }
+    Xmm_sub = Xfull_train[, c(included_features_by_iter, j_try), drop = FALSE]
+    mod = glm.fit(y_train ~ ., data.frame(Xmm_sub), family = "binomial")
+    p_hat = 1/ (1 + exp(-Xmm_sub %*% coef(mod)))
+    all_briers[j_try] = -sum((y_train - p_hat)^2)
+  }
+  j_star = which.max(all_briers)
+  included_features_by_iter = c(included_features_by_iter, j_star)
+  in_sample_briers_by_iteration = c(in_sample_briers_by_iteration, all_briers[j_star])
+  
+  #now let's look at brier
+  Xmm_sub = Xfull_train[, included_features_by_iter, drop = FALSE]
+  mod = glm.fit(y_train ~ 0 + Xmm_sub, family = "binomial")
+  p_hat_select = 1 / ( 1 + exp(-Xfull_select[, included_features_by_iter, drop = FALSE] %*% mod$coefficients))
+  oos_brier = sum(-(y_select - p_hat_select)^2)
+  oos_briers_by_iteration = c(oos_briers_by_iteration, oos_brier)
+  
+  cat("i =", i, "in sample: brier = ", round(all_briers[j_star], 1), "oos_brier", round(oos_brier, 1), "added:", colnames(Xfull_train)[j_star], "\n")
+  
+  i = i + 1
+  
+  if (i == 3){
+    break #why??
+  }
+}
+```
+
+Plot the in-sample Brier score (in red) and oos Brier score (in blue) by the number of features used.
+
+```{r}
+#TO-DO
+```
+
+Select the model with the best oos Brier score on the select set and find its oos Brier score on the test set.
+
+```{r}
+#TO-DO
+```
+
+Create the final model object `g_final`.
+
+```{r}
+#TO-DO
+```
+
+
+# Data Wrangling / Munging / Carpentry
+
+Throughout this assignment you should use `dplyr` with `magrittr` piping. I'll be writing the data.table code for you after you're done so you can see it as it may be useful for your future.
+
+```{r}
+#rm(list = ls())
+pacman::p_load(tidyverse, magrittr, data.table)
+```
+
+Load the `storms` dataset from the `dplyr` package and read about it using `?storms` and summarize its data via `skimr:skim`. 
+
+```{r}
+storms = dplyr::storms
+?storms
+skimr::skim(storms)
+head(storms)
+orig_storms=storms
+unique(orig_storms$year)
+unique(storms$year)
+```
+
+To make the modeling exercise easier, let's eliminate rows that have missingness in `tropicalstorm_force_diameter` or `hurricane_force_diameter`.
+
+```{r}
+#filter(!is.na(tropicalstorm_force_diameter)) %>%
+storms = storms %>%
+  filter(!is.na(hurricane_force_diameter)) %>%
+  filter(!is.na(tropicalstorm_force_diameter)) 
+skimr::skim(storms)
+```
+
+Which column(s) should be converted to type factor? Do the conversion:
+
+A: Only one: name.
+
+```{r}
+storms = storms %>%
+  mutate(name=factor(name))
+skimr::skim(storms)
+
+```
+
+Reorder the columns so name is first, status is second, category is third and the rest are the same.
+
+```{r}
+storms = storms %>%
+  arrange(name,status,category)
+```
+
+Find a subset of the data of storms only in the 1970's.
+
+```{r}
+#I had to use the original data, as the one we worked on only has data from 2006 and onwards
+year1970s=c(1970:1979)
+seventies=as.double(year1970s)
+typeof(seventies)
+typeof(storms$year)
+storms_1970s= orig_storms %>%
+  filter(year %in% seventies)
+skimr::skim(storms_1970s)
+
+```
+
+Find a subset of the data of storm observations only with category 4 and above and wind speed 100MPH and above.
+
+```{r}
+cat_4_wind_hundo = storms %>%
+  filter(category >= 4) %>%
+  filter(wind >=100)
+cat_4_wind_hundo
+```
+
+Create a new feature `wind_speed_per_unit_pressure`.
+
+```{r}
+storms%<>%
+  mutate(wind_speed_per_unit_pressure = wind/pressure)
+storms
+```
+
+Create a new feature: `average_diameter` which averages the two diameter metrics. If one is missing, then use the value of the one that is present. If both are missing, leave missing.
+
+```{r}
+#hurricane_force_diameter, tropicalstorm_force_diameter
+storms %<>%
+  mutate(average_diameter = ifelse(!is.na(hurricane_force_diameter) & !is.na(tropicalstorm_force_diameter),tropicalstorm_force_diameter+hurricane_force_diameter/2,
+                                   ifelse(is.na(hurricane_force_diameter),
+                                          tropicalstorm_force_diameter, 
+                                          hurricane_force_diameter)))
+storms
+```
+
+
+For each storm, summarize the maximum wind speed. "Summarize" means create a new dataframe with only the summary metrics you care about.
+
+```{r}
+maxwindstorms = storms %>%
+  group_by(name) %>%
+  summarize(maximum_wind_speed = max(wind))
+maxwindstorms %>%
+  arrange(desc(maximum_wind_speed))
+```
+
+Order your dataset by maximum wind speed storm but within the rows of storm show the observations in time order from early to late.
+
+```{r}
+storms
+name_storms = storms %>%
+  group_by(name) %>%
+  summarize(maximum_wind_speed = max(wind))
+name_storms
+?summarize
+```
+
+Find the strongest storm by wind speed per year.
+
+```{r}
+#distinct(storms[, max_wind_by_year := max(wind), by = year][wind == max_wind_by_year, .(year, name, wind)])[, .(year, name)]
+
+storms %>%
+  group_by(year) %>%
+  filter(wind == max(wind)) %>%
+  select(year, name, wind) %>%
+  distinct %>%
+  select(year, name, wind) %>%
+  arrange(year)
+```
+
+For each named storm, find its maximum category, wind speed, pressure and diameters. Do not allow the max to be NA (unless all the measurements for that storm were NA).
+
+```{r}
+skimr::skim(storms)
+storms %>%
+  group_by(name) %>%
+  summarize(c=max(category),w=max(wind),p=max(pressure),h=max(hurricane_force_diameter),t=max(tropicalstorm_force_diameter))
+```
+
+
+For each year in the dataset, tally the number of storms. "Tally" is a fancy word for "count the number of". Plot the number of storms by year. Any pattern?
+
+```{r}
+data(storms)
+storms_per_year=storms %>% 
+  group_by(year) %>% 
+  summarize(num_storms = n_distinct(name))
+ggplot(storms_per_year) + aes(year,num_storms) + geom_col()
+
+```
+The number of storms appear to be increasing
+
+For each year in the dataset, tally the storms by category.
+
+```{r}
+storms_per_year_per_category = storms %>% 
+  group_by(year,category) %>% 
+  summarize(num_storms = n())
+storms_per_year_per_category
+```
+
+For each year in the dataset, find the maximum wind speed per status level.
+
+```{r}
+max_wind_per_year_per_status = storms %>% 
+  group_by(year,status) %>% 
+  summarize(max_wind=max(wind))
+max_wind_per_year_per_status
+```
+
+For each storm, summarize its average location in latitude / longitude coordinates.
+
+```{r}
+location_storm = storms %>%
+  group_by(name) %>%
+  summarize(location_lat=mean(lat),location_long=mean(long))
+location_storm
+```
+
+For each storm, summarize its duration in number of hours (to the nearest 6hr increment).
+
+```{r}
+storm_hours = storms %>%
+  group_by(name) %>%
+  summarize(duration = n()*6)
+storm_hours
+```
+
+For storm in a category, create a variable `storm_number` that enumerates the storms 1, 2, ... (in date order).
+
+```{r}
+storms = dplyr::storms
+n=nrow(storms)
+storm_cat = storms %>%
+  group_by(category, year, name)%>%
+  mutate(storm_number = 1)
+
+for(i in 1:n-1){
+  storm_cat$storm_number[i] = storm_cat$storm_number[i] + ifelse(
+    storm_cat$name[i] == storm_cat$name[i+1] &
+      storm_cat$category[i] == storm_cat$category[i+1],
+    0,
+    1
+  )
+}
+storm_cat %>%
+  summarize(storm_number=storm_number)
+```
+
+Convert year, month, day, hour into the variable `timestamp` using the `lubridate` package. Although the new package `clock` just came out, `lubridate` still seems to be standard. Next year I'll probably switch the class to be using `clock`.
+
+```{r}
+?lubridate
+#pacman::p_load(lubridate)
+storms_time = storms
+storms_time = storms %>%
+  mutate(timestamp = ymd_h(paste(year, month, day, hour, sep = "-")))
+```
+
+Using the `lubridate` package, create new variables `day_of_week` which is a factor with levels "Sunday", "Monday", ... "Saturday" and `week_of_year` which is integer 1, 2, ..., 52.
+
+```{r}
+storms_time %<>%
+  mutate(day_of_week = weekdays(timestamp),week_of_year = week(timestamp))
+```
+
+For each storm, summarize the day in which is started in the following format "Friday, June 27, 1975".
+
+```{r}
+storms_time %>%
+  group_by(name) %>%
+  summarize(startdate = paste(weekdays(timestamp),", ",months(timestamp)," ", day,", ", year, sep = ""))
+```
+
+Create a new factor variable `decile_windspeed` by binning wind speed into 10 bins.
+
+```{r}
+range(storms_time$wind)
+storms_bin = storms_time %<>%
+  mutate(decile_windspeed = cut(wind, breaks = 10))
+storms_bin
+unique(factor(storms_bin$decile_windspeed))
+```
+
+Create a new data frame `serious_storms` which are category 3 and above hurricanes.
+
+```{r}
+serious_storms = storms %>%
+  filter(category >= 3)
+  
+unique(factor(serious_storms$category))
+```
+
+In `serious_storms`, merge the variables lat and long together into `lat_long` with values `lat / long` as a string.
+
+```{r}
+serious_storms %<>%
+  unite(lat_long, lat, long, sep = " / ")
+serious_storms
+```
+
+Let's return now to the original storms data frame. For each category, find the average wind speed, pressure and diameters (do not count the NA's in your averaging).
+
+```{r}
+storms %>%
+  group_by(category) %>%
+  summarize(ave_wind = mean(wind, na.rm=TRUE), ave_pres = mean(pressure, na.rm=TRUE), ave_trop_diam = mean(tropicalstorm_force_diameter, na.rm=TRUE), ave_hur_diam = mean(hurricane_force_diameter, na.rm=TRUE))
+#mean(storms$wind, na.rm=TRUE)
+```
+
+For each named storm, find its maximum category, wind speed, pressure and diameters (do not allow the max to be NA) and the number of readings (i.e. observations).
+
+```{r}
+storms %>%
+  group_by(name) %>%
+  summarize(max_cat = max(category, na.rm=TRUE), max_win = max(wind, na.rm = TRUE), max_pres = max(pressure, na.rm=TRUE), max_trop_diam = max(tropicalstorm_force_diameter, na.rm=TRUE), max_hur_diam = max(hurricane_force_diameter, na.rm=TRUE), number_of_readings = n())
+#max(storms$category, na.rm=TRUE)
+```
+
+Calculate the distance from each storm observation to Miami in a new variable `distance_to_miami`. This is very challenging. You will need a function that computes distances from two sets of latitude / longitude coordinates. 
+
+```{r}
+#there will be a 0.5% error as the earth is not a perfect sphere
+#https://www.omnicalculator.com/other/latitude-longitude-distance
+#d = 2R × sin⁻¹(√[sin²((θ₂ - θ₁)/2) + cosθ₁ × cosθ₂ × sin²((φ₂ - φ₁)/2)])
+R=6371 #earth's radius
+MIAMI_LAT_LONG_COORDS = c(25.7617, -80.1918)
+storms_to_miami = storms %>%
+  mutate(distance_to_miami = 
+           2*R*asin(sqrt(sin((25.7617-lat)/2)^2 + cos(lat) * cos(25.7617) *
+                           sin((-80.1918-long)/2)^2
+           )))
+
+```
+
+For each storm observation, use the function from the previous question to calculate the distance it moved since the previous observation.
+
+```{r}
+storms_movement = storms %>%
+  mutate(distance_since_previous_obs = ifelse(name != lag(name),0,
+           2*R*asin(sqrt(sin((lag(lat)-lat)/2)^2 + cos(lat) * cos(lag(lat)) *
+                           sin((lag(long)-long)/2)^2
+           ))))
+
+```
+
+For each storm, find the total distance it moved over its observations and its total displacement. "Distance" is a scalar quantity that refers to "how much ground an object has covered" during its motion. "Displacement" is a vector quantity that refers to "how far out of place an object is"; it is the object's overall change in position.
+
+```{r}
+storms_movement %>%
+  group_by(name) %>%
+  summarize(distance = sum(distance_since_previous_obs), displacement = paste(last(lat)-first(lat),last(long)-first(long),sep = ", "))
+```
+
+For each storm observation, calculate the average speed the storm moved in location.
+
+```{r}
+#as each observation is by six hours, we divide the distance by six
+storms_movement %>%
+  group_by(name) %>%
+  summarize(average_speed = sum(distance_since_previous_obs)/6)
+```
+
+For each storm, calculate its average ground speed (how fast its eye is moving which is different from windspeed around the eye).
+
+```{r}
+#we cantake the average of wind speed
+storms_movement %>%
+  group_by(name) %>%
+  summarize(average_ground_speed = mean(wind))
+```
+
+Is there a relationship between average ground speed and maximum category attained? Use a dataframe summary (not a regression).
+
+```{r}
+summary(storms)
+storms %>%
+  group_by(category)%>%
+  summarize(average_ground_speed = mean(wind))
+```
+
+Now we want to transition to building real design matrices for prediction. This is more in tune with what happens in the real world. Large data dump and you convert it into $X$ and $y$ how you see fit.
+
+Suppose we wish to predict the following: given the first three readings of a storm, can you predict its maximum wind speed? Identify the `y` and identify which features you need $x_1, ... x_p$ and build that matrix with `dplyr` functions. This is not easy, but it is what it's all about. Feel free to "featurize" as creatively as you would like. You aren't going to overfit if you only build a few features relative to the total 198 storms.
+
+```{r}
+#wind speeds at first three readings, airdistance covered, winddistance covered.
+#d = 2R × sin⁻¹(√[sin²((θ₂ - θ₁)/2) + cosθ₁ × cosθ₂ × sin²((φ₂ - φ₁)/2)
+null_mean=mean(storms$wind)#the null mean is 49.29377
+storms_model = storms %>%
+  group_by(name) %>%
+  summarize(y=max(wind),
+            x_1=wind[1],
+            x_2=wind[2],
+            x_3=wind[3],
+            ground_distance= 2*R*asin(sqrt(sin((lat[3]-lat[1])/2)^2 + cos(lat[1]) * cos(lat[3]) *
+                           sin((long[3]-long[1])/2)^2)), 
+            wind_distance=mean(wind[1]+wind[2]+wind[3]),
+            predicted_max_wind = (x_1/2)*(2*x_2)*(x_3/2)*wind_distance/ground_distance
+            )
+```
+
+Fit your model. Validate it. 
+ 
+```{r}
+model = lm(y ~ predicted_max_wind, data = storms_model)
+summary(model)$sigma
+
+n = nrow(storms_model)
+K = 10
+test_indices = sample(1 : n, 1 / K * n)
+train_indices = setdiff(1 : n, test_indices)
+
+X = select(storms_model, -y)
+y = storms_model$y
+
+X_train = X[train_indices, ]
+y_train = y[train_indices]
+X_test = X[test_indices, ]
+y_test = y[test_indices]
+
+modelvalidation = lm(y_train ~ predicted_max_wind, data = X_train)
+summary(modelvalidation)$sigma
+summary(model)$sigma
+```
+
+Assess your level of success at this endeavor.
+
+The RMSE is very close, even after cross-validation.
+
+# More data munging with table joins
+
+
+```{r}
+pacman::p_load(tidyverse, magrittr, data.table)
+```
+
+We will be using the `storms` dataset from the `dplyr` package. Filter this dataset on all storms that have no missing measurements for the two diameter variables, "ts_diameter" and "hu_diameter". Zeroes count as missing as well.
+
+```{r}
+rm(list = ls())
+storms = dplyr::storms
+storms %<>%
+  filter(!is.na(tropicalstorm_force_diameter), !is.na(hurricane_force_diameter)) %>%
+  filter(tropicalstorm_force_diameter !=0, hurricane_force_diameter !=0)
+```
+
+From this subset, create a data frame that only has storm name, observation period number for each storm (i.e., 1, 2, ..., T) and the "ts_diameter" and "hu_diameter" metrics.
+
+```{r}
+storms %>%
+  summarize(name=name,
+            observation_period_number=ifelse(name != lag(name),'first',1),
+            ts_diameter=tropicalstorm_force_diameter, 
+            hu_diameter=hurricane_force_diameter)
+storms %>%
+  group_by(name)%>%
+  summarize(count=n()) %>%
+  arrange(desc(count))
+
+```
+
+Create a data frame in long format with columns "diameter" for the measurement and "diameter_type" which will be categorical taking on the values "hu" or "ts".
+
+```{r}
+#TO-DO
+```
+
+Using this long-formatted data frame, use a line plot to illustrate both "ts_diameter" and "hu_diameter" metrics by observation period for four random storms using a 2x2 faceting. The two diameters should appear in two different colors and there should be an appropriate legend.
+
+```{r}
+#TO-DO
+```
+
+#Data Munging: a realistic exercise
+
+This lab may be the most important lab of the semester in terms of real-world experience and "putting it all together". We will be constructing a data frame which will then get passed on to the model-building. So this emulates the pre-steps necessary to get to the point where we assume we're at in this class.
+
+We will be joining three datasets in an effort to make a design matrix that predicts if a bill will be paid on time. Clean up and load up the three files. Then I'll rename a few features and then we can examine the data frames:
+
+```{r}
+rm(list = ls())
+pacman::p_load(tidyverse, magrittr, data.table, R.utils)
+bills = fread("bills_dataset/bills.csv.bz2")
+payments = fread("bills_dataset/payments.csv.bz2")
+discounts = fread("bills_dataset/discounts.csv.bz2")
+setnames(bills, "amount", "tot_amount")
+setnames(payments, "amount", "paid_amount")
+skimr::skim(bills)
+skimr::skim(payments)
+skimr::skim(discounts)
+```
+
+The unit we care about is the bill. The y metric we care about will be "paid in full" which is 1 if the company paid their total amount (we will generate this y metric later).
+
+Since this is the response, we would like to construct the very best design matrix in order to predict y.
+
+First, join the three datasets in an intelligent way. You will need to examine the datasets beforehand.
+
+```{r}
+#TO-DO
+```
+
+Now create the binary response metric `paid_in_full` as the last column and create the beginnings of a design matrix `bills_data`. Ensure the unit / observation is bill i.e. each row should be one bill! 
+
+```{r}
+#TO-DO
+```
+
+How should you add features from transformations (called "featurization")? What data type(s) should they be? Make some features below if you think of any useful ones. Name the columns appropriately so another data scientist can easily understand what information is in your variables. Make sure the response variable is there too in the final data frame.
+
+```{r}
+#TO-DO
+```
+

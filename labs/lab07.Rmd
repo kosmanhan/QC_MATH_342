@@ -455,33 +455,42 @@ microbenchmark(
 Implement the Gram Schmidt routine as a C++ function `gram_schmidt_cpp`.
 
 ```{r}
+#Rcpp::transpose()
+#Rcpp::pow(v_k, 2)
+#Rcpp::sum(Rcpp::pow(V.column(j), 2))
 cppFunction('
   NumericMatrix gram_schmidt_cpp(NumericMatrix X){
+  
   NumericMatrix V(X.nrow(), X.ncol());
   
   for (int i = 0; i < X.nrow(); i++){
-    V[i][0] = X[i][0];
+    V(i,0) = X(i,0);
   }
   
-  for (int j = 2; j < X.ncol(); j++){
+  
+  for (int j = 1; j < X.ncol(); j++){
     for (int i = 0; i< X.nrow(); i++){
-      V[i][j] = X[i][j];
+      V(i,j) = X(i,j);
     }
+    
     for (int k = 0; k<j; k++){
-      NumericMatrix v_k = V[, k];
-      V[_, j] = V[_, j] - (t(t(v_k)) %*% t(v_k) / sum(v_k^2)) %*% t(t(X[_, j]));
+      NumericMatrix v_k = V[,k];
+      V(_, j) = V(_, j) - (t(t(v_k)) %*% t(v_k) / sum(v_k^2)) %*% t(t(X(_, j));
     }
   }
 
   NumericMatrix Q(X.nrow(),X.ncol());
   
   for (int j = 1; j < X.ncol(); j++){
-    Q[_, j] = V[_, j] / sqrt(sum(V[_, j]^2));
+    Q(_, j) = V(_, j) / sqrt(sum(V[_, j)^2));
   }
-  return Q;
+  return NumericMatrix Q;
 }
   
 ')
+
+
+
 ```
 
 Here is the implementation in R for reference taken from lab 5:
@@ -500,6 +509,7 @@ gram_schmidt_R = function(X){
     
     for (k in 1 : (j-1)){
       v_k = V[, k, drop = FALSE]
+      
       V[, j] = V[, j, drop = FALSE] - (t(t(v_k)) %*% t(v_k) / sum(v_k^2)) %*% t(t(X[, j])) #i.e. the orthogonal projection of X[, j] onto v_k
     }
   }
